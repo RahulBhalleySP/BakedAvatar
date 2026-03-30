@@ -10,7 +10,7 @@
     <a href='https://yanpei.me/' target='_blank'>Yan-Pei Cao<sup>3</sup></a>
 </div>
 <div>
-    <sup>1</sup>State Key Laboratory of Virtual Reality Technology and Systems, Beihang University&emsp; 
+    <sup>1</sup>State Key Laboratory of Virtual Reality Technology and Systems, Beihang University&emsp;
     <sup>2</sup>Zhongguancun Laboratory&emsp;
     <sup>3</sup>ARC Lab, Tencent PCG
 </div>
@@ -72,12 +72,127 @@ pip install Cython && pip install code/utils/libmise/
 
 Finally, download [FLAME model](https://flame.is.tue.mpg.de/download.php), choose FLAME 2020 and unzip it, copy 'generic_model.pkl' into ./code/flame/FLAME2020
 
+---
+
+## macOS Apple Silicon (M1/M2/M3/M4) Setup
+
+> **Note:** This setup uses MPS (Metal Performance Shaders) instead of CUDA. Stage-1 (implicit field training/inference) runs fully on MPS. Stage-2/3 (mesh baking) requires nvdiffrast which currently requires CUDA and is not supported on macOS.
+
+### Prerequisites
+- Xcode with Command Line Tools: `xcode-select --install`
+- [pyenv](https://github.com/pyenv/pyenv) or similar for Python management
+- Homebrew
+
+### Create virtual environment
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### Install PyTorch (MPS-enabled)
+```bash
+pip install torch torchvision torchaudio
+```
+
+### Install core packages
+```bash
+pip install accelerate configargparse chumpy opencv-python pymeshlab trimesh scikit-image \
+            xatlas matplotlib tensorboard tqdm torchmetrics face-alignment cmake gdown Cython
+```
+
+### Install pytorch3d from source (macOS requires SDK path fix)
+```bash
+SDK=$(xcrun --sdk macosx --show-sdk-path)
+MACOSX_DEPLOYMENT_TARGET=13.0 SDKROOT=$SDK LDFLAGS="-L${SDK}/usr/lib" \
+  pip install "git+https://github.com/facebookresearch/pytorch3d.git" --no-build-isolation
+```
+
+### Install libmise
+```bash
+SDK=$(xcrun --sdk macosx --show-sdk-path)
+MACOSX_DEPLOYMENT_TARGET=13.0 SDKROOT=$SDK LDFLAGS="-L${SDK}/usr/lib" \
+  pip install --no-build-isolation code/utils/libmise/
+```
+
+### Configure accelerate for MPS (single process)
+```bash
+cat > ~/.cache/huggingface/accelerate/default_config.yaml << 'EOF'
+compute_environment: LOCAL_MACHINE
+distributed_type: NO
+mixed_precision: 'no'
+num_machines: 1
+num_processes: 1
+use_cpu: false
+EOF
+```
+
+### FLAME model
+FLAME 2020 requires registration at https://flame.is.tue.mpg.de/download.php. Alternatively, [FLAME 2023 Open](https://flame.is.tue.mpg.de/download.php) (no registration) has a compatible structure:
+```bash
+mkdir -p code/flame/FLAME2020
+cp /path/to/flame2023_Open.pkl code/flame/FLAME2020/generic_model.pkl
+```
+
+### Known code patches for macOS
+
+**`code/model/metrics.py`** — auto-detect MPS/CPU for face_alignment:
+```python
+device = 'mps' if torch.backends.mps.is_available() else ('cuda' if torch.cuda.is_available() else 'cpu')
+self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False, device=device)
+```
+
+**`code/dataset/real.py`** — fix float64 keypoints (MPS doesn't support float64):
+```python
+# line ~88: change to explicit float32
+halfsize_bbox = np.array([img_res[0], img_res[1], img_res[0], img_res[1]], dtype=np.float32) / 2
+```
+
+### Run inference on macOS (Stage-1 only)
+```bash
+cd code
+# Use --num_workers 0 to avoid macOS multiprocessing issues
+# Use --img_res 256 256 for lower memory usage (512x512 may OOM)
+accelerate launch scripts/runner.py -c config/subject1.yaml -t test \
+  --img_res 256 256 --num_workers 0
+```
+
+---
+
+## Kaggle Notebook Setup (GPU / Multi-GPU)
+
+A ready-to-use Kaggle notebook is provided at [`BakedAvatar_Kaggle.ipynb`](./BakedAvatar_Kaggle.ipynb). Import it directly on Kaggle.
+
+**Quick steps:**
+1. Go to [Kaggle](https://www.kaggle.com) → **New Notebook** → **File** → **Import Notebook** → upload `BakedAvatar_Kaggle.ipynb`
+2. Enable GPU accelerator: **Settings** → **Accelerator** → T4 GPU (or 2×T4 for multi-GPU)
+3. Enable internet access in Settings
+4. Upload FLAME model as a Kaggle dataset (see notebook instructions)
+5. Run all cells
+
+---
+
 ## Download Training Data
 We use the same data format as in [IMavatar](https://github.com/zhengyuf/IMavatar) and [PointAvatar](https://github.com/zhengyuf/PointAvatar).
 You can download a preprocessed dataset from [subject 1](https://dataset.ait.ethz.ch/downloads/IMavatar_data/data/subject1.zip), [subject 2](https://dataset.ait.ethz.ch/downloads/IMavatar_data/data/subject2.zip), then unzip the files into `data/datasets` folder. You should be able to see the paths of one subject's videos structured like `data/datasets/<subject_name>/<video_name>`.
 To generate your own dataset, please follow the instructions in the [IMavatar repo](https://github.com/zhengyuf/IMavatar/tree/main/preprocess).
 
 We also provide an example of the pre-trained checkpoint [here](https://drive.google.com/file/d/137TTr8GENZmPZ-Me1SatymMCiVDKqDPR/view?usp=drive_link).
+
+```bash
+# Download dataset
+wget https://dataset.ait.ethz.ch/downloads/IMavatar_data/data/subject1.zip
+unzip subject1.zip -d data/datasets/
+
+# Download pretrained checkpoint (requires 7zip for extraction)
+pip install gdown
+gdown 137TTr8GENZmPZ-Me1SatymMCiVDKqDPR -O data/pretrained.7z
+7z x data/pretrained.7z -o data/
+
+# Set up expected directory structure (the checkpoint is for "yufeng" dataset)
+mkdir -p data/experiments
+mv data/yufeng/034_8layer_Rfreq12_Mfreq5_flamegtdist_eyeweight2 data/experiments/subject1
+ln -sf $(pwd)/data/datasets/subject1/subject1 data/datasets/yufeng
+```
 
 ## Train implicit fields (Stage-1)
 ```bash
@@ -116,7 +231,7 @@ accelerate launch scripts/runner.py -c config/subject1.yaml -t test --img_res 51
 
 # run cross-identity reenactment using meshes in PyTorch code
 # you may replace the reenact_data_dir with the path to the reenactment dataset and replace the reenact_subdirs with the subdirectories names
-# if you would like to see reenactment results of implicit fields, remove --use_finetune_model 
+# if you would like to see reenactment results of implicit fields, remove --use_finetune_model
 accelerate launch scripts/runner.py -c config/subject1.yaml -t test --img_res 512 512 \
   --use_finetune_model --mesh_data_path ../data/experiments/subject1/finetune_mesh_data/iter_30000/mesh_data.pkl \
   --reenact_data_dir ../data/datasets/soubhik --reenact_subdirs test

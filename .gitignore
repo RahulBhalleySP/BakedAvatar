@@ -1,14 +1,71 @@
+# Project Specific
+data
+nvdiffrast
+code/flame/**/*.pkl
+mesh_data**/
+sequence_data**/
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-
-.vscode/
-data
-nvdiffrast
-code/flame/**/*.pkl
-
-node_modules/
-mesh_data**/
-sequence_data**/
+.Python
+build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Node / JS
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+dist/
+build/
+.next/
+out/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+.cursor/
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
