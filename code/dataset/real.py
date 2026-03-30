@@ -85,7 +85,7 @@ class RealVideoDataset(Dataset):
         if self.use_semantics:
             self.frame_data["semantic_path"] = []
 
-        halfsize_bbox = np.array([img_res[0], img_res[1], img_res[0], img_res[1]]) / 2
+        halfsize_bbox = np.array([img_res[0], img_res[1], img_res[0], img_res[1]], dtype=np.float32) / 2
         for sub_dir in sub_dirs:
             dir = os.path.join(self.data_dir, sub_dir)
             assert os.path.exists(dir), f"Directory {dir} does not exist."

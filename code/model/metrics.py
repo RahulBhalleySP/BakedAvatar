@@ -13,10 +13,11 @@ class TestMetric(torch.nn.Module):
         self.without_cloth = without_cloth
         self.only_face_interior = only_face_interior
         self.lpips = image_metrics.LearnedPerceptualImagePatchSimilarity(normalize=True)
+        device = 'mps' if torch.backends.mps.is_available() else ('cuda' if torch.cuda.is_available() else 'cpu')
         try:
-            self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False)
+            self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False, device=device)
         except:
-            self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False)
+            self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False, device=device)
 
     def calc_pixel_error(self, rgb_image_output, rgb_image_gt, mask_gt=None):
         """
